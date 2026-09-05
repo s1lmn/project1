@@ -2,6 +2,10 @@
 
 Telegram Mini App для поиска партнёров по спорту рядом. MVP поддерживает реальный серверный цикл: вход через Telegram → профиль → активность → отклик → решение → контакт → подтверждение встречи → оценка.
 
+Frontend: <https://s1lmn.github.io/project1/>
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https%3A%2F%2Fgithub.com%2Fs1lmn%2Fproject1)
+
 ## Быстрый запуск через Docker Compose
 
 Нужны Docker Engine с Compose v2 и свободные порты 5173, 8000, 5432.
