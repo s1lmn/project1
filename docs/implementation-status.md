@@ -5,7 +5,7 @@
 | PRO-3–PRO-7 | Ожидает решения/действия команды | Шаблоны исследования, scope, метрик и карта flow подготовлены; реальный кластер, интервью и согласованная Figma отсутствуют. |
 | PRO-8 | Реализовано, внешняя интеграция не проверена | Bot API подтвердил `@sportssmatebot`; Main Mini App ещё не включён в BotFather, запуск из Telegram не проверялся. |
 | PRO-9–PRO-11 | Реализовано и локально проверено | React skeleton, тема/safe areas, API client, HMAC initData, сессия и dev guard. |
-| PRO-12 | Реализовано, внешняя интеграция не проверена | Compose, CI, health, structured logs, Sentry hooks; hosting/deploy credentials не выбраны. |
+| PRO-12 | Реализовано частично во внешнем окружении | GitHub CI зелёный, frontend опубликован через Pages; API/PostgreSQL/worker ожидают применения Render Blueprint и секретов. |
 | PRO-13–PRO-18 | Реализовано и локально проверено | Профиль, активность, лента, мои, отклики, решения, идемпотентность, защищённый контакт. PostgreSQL concurrency требует отдельного прогона. |
 | PRO-19 | Реализовано, внешняя интеграция не проверена | Устойчивая очередь, retries, suppression, сообщения/deep links; реальная доставка ботом не тестировалась. |
 | PRO-20–PRO-22 | Реализовано и локально проверено | Worker lifecycle, подтверждение, рейтинг, report/block, CLI moderation; расширенные edge/concurrency тесты ещё нужны. |
