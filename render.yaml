@@ -1,0 +1,67 @@
+databases:
+  - name: sports-mate-db
+    databaseName: sports_mate
+    user: sports_mate
+    plan: free
+
+services:
+  - type: web
+    name: sports-mate-api-s1lmn
+    runtime: docker
+    plan: free
+    dockerContext: ./apps/api
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerCommand: /bin/sh -c "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sports-mate-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: INTERNAL_API_KEY
+        generateValue: true
+      - key: ENABLE_DEV_AUTH
+        value: false
+      - key: TELEGRAM_NOTIFICATIONS_ENABLED
+        value: true
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_USERNAME
+        value: sportssmatebot
+      - key: TELEGRAM_WEBAPP_URL
+        value: https://s1lmn.github.io/project1/#
+      - key: ALLOWED_ORIGINS
+        value: https://s1lmn.github.io
+
+  - type: worker
+    name: sports-mate-worker-s1lmn
+    runtime: docker
+    plan: 0.5c-512mb
+    dockerContext: ./apps/api
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerCommand: python -m app.worker
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sports-mate-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: INTERNAL_API_KEY
+        generateValue: true
+      - key: ENABLE_DEV_AUTH
+        value: false
+      - key: TELEGRAM_NOTIFICATIONS_ENABLED
+        value: true
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_USERNAME
+        value: sportssmatebot
+      - key: TELEGRAM_WEBAPP_URL
+        value: https://s1lmn.github.io/project1/#

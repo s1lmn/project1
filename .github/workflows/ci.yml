@@ -1,0 +1,52 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: sports_mate_test
+          POSTGRES_USER: sports_mate
+          POSTGRES_PASSWORD: sports_mate
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sports_mate"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -e 'apps/api[dev]'
+      - run: ruff check apps/api
+      - run: pytest -q
+        working-directory: apps/api
+        env:
+          APP_ENV: test
+          DATABASE_URL: postgresql+psycopg://sports_mate:sports_mate@localhost:5432/sports_mate_test
+          ENABLE_DEV_AUTH: "true"
+          SESSION_SECRET: test-session-secret-that-is-long-enough
+          TELEGRAM_BOT_TOKEN: test-token
+          INTERNAL_API_KEY: test-internal-key
+      - run: alembic upgrade head
+        working-directory: apps/api
+        env:
+          APP_ENV: test
+          DATABASE_URL: postgresql+psycopg://sports_mate:sports_mate@localhost:5432/sports_mate_test
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 11 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm, cache-dependency-path: apps/web/pnpm-lock.yaml }
+      - run: pnpm install --frozen-lockfile
+        working-directory: apps/web
+      - run: pnpm run lint && pnpm run build
+        working-directory: apps/web

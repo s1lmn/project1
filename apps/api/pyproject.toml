@@ -1,0 +1,42 @@
+[project]
+name = "sports-mate-api"
+version = "0.1.0"
+description = "SPORTS MATE MVP API and worker"
+requires-python = ">=3.12"
+dependencies = [
+  "alembic>=1.14,<2",
+  "fastapi>=0.116,<1",
+  "httpx>=0.28,<1",
+  "itsdangerous>=2.2,<3",
+  "psycopg[binary]>=3.2,<4",
+  "pydantic-settings>=2.7,<3",
+  "sentry-sdk[fastapi]>=2.20,<3",
+  "sqlalchemy>=2.0,<2.1",
+  "uvicorn[standard]>=0.34,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<9",
+  "pytest-cov>=6,<7",
+  "ruff>=0.9,<1",
+]
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["B008", "E501", "UP017", "UP042"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
