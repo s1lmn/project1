@@ -1,5 +1,6 @@
 from collections import Counter
 from datetime import date, datetime, time, timedelta, timezone
+from hmac import compare_digest
 from statistics import median
 from zoneinfo import ZoneInfo
 
@@ -115,7 +116,11 @@ def block_user(
             or 0
         )
         activity = db.scalar(select(Activity).where(Activity.id == response.activity_id))
-        if activity and activity.status == "filled" and accepted < activity.players_needed:
+        if (
+            activity
+            and activity.status == "filled"
+            and (activity.players_needed is None or accepted < activity.players_needed)
+        ):
             activity.status = "active"
     track(db, "user_blocked", actor, properties={"target_user_id": body.target_user_id})
     db.commit()
@@ -147,7 +152,11 @@ def internal_access(
     x_internal_key: str | None = Header(default=None),
     settings: Settings = Depends(get_settings),
 ) -> None:
-    if not settings.internal_api_key or x_internal_key != settings.internal_api_key:
+    if (
+        not settings.internal_api_key
+        or not x_internal_key
+        or not compare_digest(x_internal_key, settings.internal_api_key)
+    ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Недостаточно прав")
 
 

@@ -4,6 +4,7 @@ import time
 import uuid
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
+from ipaddress import ip_address
 
 import sentry_sdk
 from fastapi import FastAPI, HTTPException, Request
@@ -20,8 +21,25 @@ from .routes import activities, auth_profiles, safety_metrics
 
 settings = get_settings()
 logging.basicConfig(level=settings.log_level, format="%(message)s")
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger("sports_mate")
 rate_windows: dict[tuple[str, str], deque[float]] = defaultdict(deque)
+
+
+def client_ip(request: Request) -> str:
+    direct = request.client.host if request.client else "unknown"
+    if direct not in {"127.0.0.1", "::1"}:
+        return direct
+    forwarded = request.headers.get("cf-connecting-ip") or request.headers.get("x-forwarded-for", "")
+    candidate = forwarded.split(",", 1)[0].strip()
+    if not candidate:
+        return direct
+    try:
+        return str(ip_address(candidate))
+    except ValueError:
+        return direct
+
 
 if settings.sentry_dsn:
     sentry_sdk.init(dsn=settings.sentry_dsn, environment=settings.app_env, send_default_pii=False)
@@ -76,7 +94,7 @@ async def request_context(request: Request, call_next):
     elif request.method in {"POST", "PATCH", "DELETE"}:
         category = "write"
     if category and request.method != "OPTIONS":
-        client = request.client.host if request.client else "unknown"
+        client = client_ip(request)
         bucket = rate_windows[(client, category)]
         cutoff = started - 60
         while bucket and bucket[0] < cutoff:

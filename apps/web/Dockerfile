@@ -2,7 +2,8 @@ FROM node:22-alpine AS build
 WORKDIR /app
 ARG VITE_API_URL=http://localhost:8000
 ARG VITE_BOT_USERNAME=sportssmatebot
-ENV VITE_API_URL=$VITE_API_URL VITE_BOT_USERNAME=$VITE_BOT_USERNAME
+ARG VITE_ENABLE_DEV_AUTH=false
+ENV VITE_API_URL=$VITE_API_URL VITE_BOT_USERNAME=$VITE_BOT_USERNAME VITE_ENABLE_DEV_AUTH=$VITE_ENABLE_DEV_AUTH
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN corepack enable && corepack prepare pnpm@11.19.0 --activate && pnpm install --frozen-lockfile
 COPY . .

@@ -51,6 +51,7 @@ services:
       args:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
         VITE_BOT_USERNAME: ${VITE_BOT_USERNAME:-sportssmatebot}
+        VITE_ENABLE_DEV_AUTH: ${VITE_ENABLE_DEV_AUTH:-true}
     depends_on:
       api:
         condition: service_healthy

@@ -42,6 +42,13 @@ def test_invalid_and_expired_telegram_data():
         validate_telegram_init_data(signed_data("wrong"), "token", 3600, now=1_700_000_100)
     with pytest.raises(ValueError, match="устарели"):
         validate_telegram_init_data(signed_data("token"), "token", 10, now=1_700_000_100)
+    with pytest.raises(ValueError, match="повторяющиеся"):
+        validate_telegram_init_data(
+            f"{signed_data('token')}&auth_date=1700000000",
+            "token",
+            3600,
+            now=1_700_000_100,
+        )
 
 
 def test_production_dev_auth_disabled(monkeypatch):

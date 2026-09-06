@@ -11,7 +11,7 @@ class TelegramAuthRequest(BaseModel):
 
 
 class DevAuthRequest(BaseModel):
-    telegram_id: int
+    telegram_id: int = Field(gt=0)
     first_name: str = Field(min_length=1, max_length=128)
     username: str | None = Field(default=None, max_length=64)
 
@@ -23,14 +23,14 @@ class SessionResponse(BaseModel):
 
 
 class UserSportInput(BaseModel):
-    sport_id: str
+    sport_id: str = Field(min_length=1, max_length=40)
     level: Level
 
 
 class ProfileUpdate(BaseModel):
-    age: int
+    age: int = Field(ge=1, le=120)
     bio: str = Field(default="", max_length=500)
-    district_id: str
+    district_id: str = Field(min_length=1, max_length=40)
     sports: list[UserSportInput] = Field(min_length=1, max_length=10)
 
     @field_validator("sports")
@@ -67,12 +67,12 @@ class LookupItem(BaseModel):
 
 
 class ActivityCreate(BaseModel):
-    sport_id: str
-    district_id: str
+    sport_id: str = Field(min_length=1, max_length=40)
+    district_id: str = Field(min_length=1, max_length=40)
     level: Level
     starts_at: datetime
     place: str = Field(min_length=2, max_length=200)
-    players_needed: int
+    players_needed: int | None
     comment: str = Field(default="", max_length=1000)
     client_request_id: str = Field(min_length=8, max_length=64)
 
@@ -83,10 +83,18 @@ class ActivityCreate(BaseModel):
             raise ValueError("Укажите часовой пояс")
         return value
 
+    @field_validator("place")
+    @classmethod
+    def non_blank_place(cls, value: str):
+        value = value.strip()
+        if len(value) < 2:
+            raise ValueError("Укажите место встречи")
+        return value
+
 
 class ActivityUpdate(BaseModel):
-    sport_id: str | None = None
-    district_id: str | None = None
+    sport_id: str | None = Field(default=None, min_length=1, max_length=40)
+    district_id: str | None = Field(default=None, min_length=1, max_length=40)
     level: Level | None = None
     starts_at: datetime | None = None
     place: str | None = Field(default=None, min_length=2, max_length=200)
@@ -98,6 +106,16 @@ class ActivityUpdate(BaseModel):
     def optional_timezone_required(cls, value: datetime | None):
         if value is not None and (value.tzinfo is None or value.utcoffset() is None):
             raise ValueError("Укажите часовой пояс")
+        return value
+
+    @field_validator("place")
+    @classmethod
+    def optional_non_blank_place(cls, value: str | None):
+        if value is None:
+            return None
+        value = value.strip()
+        if len(value) < 2:
+            raise ValueError("Укажите место встречи")
         return value
 
 
@@ -122,9 +140,9 @@ class ActivityOut(BaseModel):
     starts_at: datetime
     timezone: str
     place: str
-    players_needed: int
+    players_needed: int | None
     accepted_count: int
-    remaining_places: int
+    remaining_places: int | None
     response_count: int
     comment: str
     status: str

@@ -58,7 +58,9 @@ def _validate_refs(db: Session, sport_id: str, district_id: str) -> District:
     return district
 
 
-def _check_players(value: int, settings: Settings) -> None:
+def _check_players(value: int | None, settings: Settings) -> None:
+    if value is None:
+        return
     if not settings.min_players_needed <= value <= settings.max_players_needed:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Недопустимое число игроков"
@@ -204,9 +206,9 @@ def update_activity(
             status.HTTP_409_CONFLICT,
             detail="После принятия участника место, время, район и спорт менять нельзя",
         )
-    if body.players_needed is not None:
+    if "players_needed" in changes:
         _check_players(body.players_needed, settings)
-        if body.players_needed < accepted:
+        if body.players_needed is not None and body.players_needed < accepted:
             raise HTTPException(
                 status.HTTP_409_CONFLICT, detail="Мест не может быть меньше уже принятых участников"
             )
@@ -230,7 +232,11 @@ def update_activity(
             if isinstance(value, str)
             else value,
         )
-    activity.status = "filled" if accepted >= activity.players_needed else "active"
+    activity.status = (
+        "filled"
+        if activity.players_needed is not None and accepted >= activity.players_needed
+        else "active"
+    )
     db.commit()
     return activity_out(db, db.scalar(activity_query().where(Activity.id == activity.id)), actor)
 
@@ -308,7 +314,10 @@ def respond(
     if (
         activity.status != "active"
         or as_utc(activity.starts_at) <= utcnow()
-        or accepted_count(activity) >= activity.players_needed
+        or (
+            activity.players_needed is not None
+            and accepted_count(activity) >= activity.players_needed
+        )
     ):
         raise HTTPException(status.HTTP_409_CONFLICT, detail="Отклики больше не принимаются")
     existing = db.scalar(
@@ -390,12 +399,18 @@ def _decide(response_id: str, decision: str, actor: User, db: Session) -> Respon
     if as_utc(activity.starts_at) <= utcnow() or activity.status not in {"active", "filled"}:
         raise HTTPException(status.HTTP_409_CONFLICT, detail="Набор уже закрыт")
     if decision == "accepted":
-        if accepted_count(activity) >= activity.players_needed:
+        if (
+            activity.players_needed is not None
+            and accepted_count(activity) >= activity.players_needed
+        ):
             raise HTTPException(status.HTTP_409_CONFLICT, detail="Места уже набраны")
         response.status = "accepted"
         response.accepted_at = utcnow()
         response.decision_reason = "organizer_decision"
-        if accepted_count(activity) >= activity.players_needed:
+        if (
+            activity.players_needed is not None
+            and accepted_count(activity) >= activity.players_needed
+        ):
             activity.status = "filled"
         track(db, "response_accepted", actor, activity)
         enqueue(

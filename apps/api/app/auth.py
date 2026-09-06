@@ -3,7 +3,7 @@ import hmac
 import json
 import time
 from dataclasses import dataclass
-from urllib.parse import parse_qsl
+from urllib.parse import parse_qsl, urlparse
 
 from fastapi import Depends, Header, HTTPException, status
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -30,7 +30,10 @@ def validate_telegram_init_data(
 ) -> TelegramIdentity:
     if not init_data or not bot_token:
         raise ValueError("Telegram-авторизация не настроена")
-    values = dict(parse_qsl(init_data, keep_blank_values=True))
+    pairs = parse_qsl(init_data, keep_blank_values=True)
+    if len(pairs) != len({key for key, _ in pairs}):
+        raise ValueError("Данные Telegram содержат повторяющиеся поля")
+    values = dict(pairs)
     received_hash = values.pop("hash", None)
     if not received_hash:
         raise ValueError("Отсутствует подпись Telegram")
@@ -48,19 +51,26 @@ def validate_telegram_init_data(
         raise ValueError("Данные Telegram устарели")
     try:
         user = json.loads(values["user"])
+        if not isinstance(user, dict):
+            raise ValueError("Некорректные данные пользователя Telegram")
         telegram_id = int(user["id"])
         first_name = str(user["first_name"]).strip()
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
         raise ValueError("Некорректные данные пользователя Telegram") from exc
-    if not first_name:
+    if telegram_id <= 0 or not first_name:
         raise ValueError("Telegram не передал имя")
+    username = str(user.get("username") or "").strip()[:64] or None
+    last_name = str(user.get("last_name") or "").strip()[:128] or None
+    photo_url = str(user.get("photo_url") or "").strip()[:2048] or None
+    if photo_url and urlparse(photo_url).scheme != "https":
+        photo_url = None
     start_param = str(values.get("start_param", "unknown"))[:80]
     return TelegramIdentity(
         telegram_id=telegram_id,
-        username=user.get("username"),
+        username=username,
         first_name=first_name[:128],
-        last_name=(user.get("last_name") or None),
-        photo_url=(user.get("photo_url") or None),
+        last_name=last_name,
+        photo_url=photo_url,
         acquisition_source=start_param or "unknown",
     )
 
@@ -88,7 +98,9 @@ def get_current_user(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Сессия истекла") from exc
     except BadSignature as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Некорректная сессия") from exc
-    user = db.scalar(select(User).where(User.id == payload.get("sub")))
+    if not isinstance(payload, dict) or payload.get("v") != 1 or not payload.get("sub"):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Некорректная сессия")
+    user = db.scalar(select(User).where(User.id == payload["sub"]))
     if not user or user.globally_blocked_at:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Доступ ограничен")
     return user

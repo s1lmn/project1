@@ -151,6 +151,50 @@ def test_owner_rights_self_response_and_block(client):
     assert client.get(f"/activities/{activity_id}", headers=headers(stranger)).status_code == 404
 
 
+def test_unlimited_activity_stays_open_after_accepting_participants(client):
+    owner = dev_login(client, 350, "Автор", "owner_unlimited")
+    first = dev_login(client, 351, "Первый", "first_unlimited")
+    second = dev_login(client, 352, "Второй", "second_unlimited")
+    for token in (owner, first, second):
+        onboard(client, token)
+
+    created = client.post(
+        "/activities",
+        headers=headers(owner),
+        json={
+            "sport_id": "running",
+            "district_id": "test",
+            "level": "intermediate",
+            "starts_at": (utcnow() + timedelta(hours=2)).isoformat(),
+            "place": "Большой парк",
+            "players_needed": None,
+            "client_request_id": "unlimited-participants",
+        },
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["players_needed"] is None
+    assert created.json()["remaining_places"] is None
+    activity_id = created.json()["id"]
+
+    for token in (first, second):
+        response = client.post(f"/activities/{activity_id}/respond", headers=headers(token))
+        assert response.status_code == 201, response.text
+        accepted = client.patch(
+            f"/responses/{response.json()['id']}/accept", headers=headers(owner)
+        )
+        assert accepted.status_code == 200, accepted.text
+
+    details = client.get(f"/activities/{activity_id}", headers=headers(owner))
+    assert details.status_code == 200, details.text
+    assert details.json()["status"] == "active"
+    assert details.json()["remaining_places"] is None
+
+    too_small = client.patch(
+        f"/activities/{activity_id}", headers=headers(owner), json={"players_needed": 1}
+    )
+    assert too_small.status_code == 409, too_small.text
+
+
 def test_concurrent_accept_last_place(client):
     if engine.dialect.name != "postgresql":
         pytest.skip("SELECT FOR UPDATE проверяется только на PostgreSQL")

@@ -122,7 +122,7 @@ class Activity(TimestampMixin, Base):
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, nullable=False)
     timezone: Mapped[str] = mapped_column(String(64), nullable=False)
     place: Mapped[str] = mapped_column(String(200), nullable=False)
-    players_needed: Mapped[int] = mapped_column(Integer, nullable=False)
+    players_needed: Mapped[int | None] = mapped_column(Integer, nullable=True)
     comment: Mapped[str] = mapped_column(String(1000), default="", nullable=False)
     status: Mapped[str] = mapped_column(String(20), default=ActivityStatus.active.value, index=True)
     client_request_id: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -137,7 +137,10 @@ class Activity(TimestampMixin, Base):
 
     __table_args__ = (
         UniqueConstraint("author_id", "client_request_id", name="uq_activity_idempotency"),
-        CheckConstraint("players_needed BETWEEN 1 AND 20", name="ck_activity_players"),
+        CheckConstraint(
+            "players_needed IS NULL OR players_needed BETWEEN 1 AND 20",
+            name="ck_activity_players",
+        ),
         Index("ix_feed", "status", "district_id", "starts_at"),
     )
 

@@ -115,7 +115,11 @@ def activity_out(db: Session, activity: Activity, actor: User) -> ActivityOut:
         place=activity.place,
         players_needed=activity.players_needed,
         accepted_count=accepted,
-        remaining_places=max(0, activity.players_needed - accepted),
+        remaining_places=(
+            None
+            if activity.players_needed is None
+            else max(0, activity.players_needed - accepted)
+        ),
         response_count=response_count(activity),
         comment=activity.comment,
         status=activity.status,
@@ -127,7 +131,7 @@ def activity_out(db: Session, activity: Activity, actor: User) -> ActivityOut:
             and as_utc(activity.starts_at) > datetime.now(timezone.utc)
             and activity.author_id != actor.id
             and own_response is None
-            and accepted < activity.players_needed
+            and (activity.players_needed is None or accepted < activity.players_needed)
         ),
         can_confirm_result=can_confirm,
         meeting_result=result,

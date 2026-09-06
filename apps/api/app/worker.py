@@ -12,6 +12,8 @@ from .services import track
 
 settings = get_settings()
 logging.basicConfig(level=settings.log_level)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger("sports_mate.worker")
 
 

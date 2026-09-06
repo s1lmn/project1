@@ -27,9 +27,9 @@ export type Activity = {
   starts_at: string
   timezone: string
   place: string
-  players_needed: number
+  players_needed: number | null
   accepted_count: number
-  remaining_places: number
+  remaining_places: number | null
   response_count: number
   comment: string
   status: string

@@ -14,6 +14,36 @@ const statusNames: Record<string, string> = {
   accepted: 'Вы приняты', rejected: 'Отклик отклонён',
 }
 
+const participantLimits = [1, 2, 3, 4, 5]
+
+function dateInputValue(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function filterDateLabel(value: string) {
+  return new Date(`${value}T12:00:00`).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+}
+
+function placesLabel(value: number) {
+  const lastTwo = value % 100
+  const last = value % 10
+  const word = lastTwo >= 11 && lastTwo <= 14 ? 'мест' : last === 1 ? 'место' : last >= 2 && last <= 4 ? 'места' : 'мест'
+  return `${value} ${word}`
+}
+
+function ParticipantLimitField({ value, onChange }: { value: number | null; onChange: (value: number | null) => void }) {
+  return <label>Сколько участников ищете
+    <select required value={value === null ? 'unlimited' : String(value)} onChange={e => onChange(e.target.value === 'unlimited' ? null : Number(e.target.value))}>
+      {participantLimits.map(limit => <option key={limit} value={limit}>{limit} {limit === 1 ? 'участник' : limit < 5 ? 'участника' : 'участников'}</option>)}
+      <option value="unlimited">Без ограничений</option>
+    </select>
+    <small className="field-hint">Количество людей без учёта организатора</small>
+  </label>
+}
+
 function useLookups() {
   const [data, setData] = useState<{ sports: Lookup[]; districts: Lookup[] }>({ sports: [], districts: [] })
   useEffect(() => { api<typeof data>('/lookups').then(setData).catch(() => undefined) }, [])
@@ -38,6 +68,7 @@ function AuthScreen({ onDone }: { onDone: () => void }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const inTelegram = Boolean(window.Telegram?.WebApp.initData)
+  const devAuthEnabled = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_AUTH === 'true'
   const signIn = async (dev = false) => {
     setBusy(true); setError('')
     try {
@@ -61,7 +92,7 @@ function AuthScreen({ onDone }: { onDone: () => void }) {
     {!inTelegram && <>
       <Notice>Откройте приложение из Telegram — так мы безопасно подтвердим ваш профиль.</Notice>
       <a className="button primary" href={`https://t.me/${import.meta.env.VITE_BOT_USERNAME || 'sportssmatebot'}`}>Открыть бота</a>
-      {import.meta.env.DEV && <button className="button ghost" disabled={busy} onClick={() => signIn(true)}>Войти как тестовый пользователь</button>}
+      {devAuthEnabled && <button className="button ghost" disabled={busy} onClick={() => signIn(true)}>Войти как тестовый пользователь</button>}
     </>}
     {inTelegram && <p className="muted">Подтверждаем вход…</p>}
   </main>
@@ -83,9 +114,15 @@ function ProfileForm({ profile, onSaved, title = 'Расскажите о себ
     ? current.filter(x => x.sport_id !== sport_id)
     : [...current, { sport_id, level: 'beginner' }])
   const save = async (event: FormEvent) => {
-    event.preventDefault(); setBusy(true); setError('')
+    event.preventDefault(); setError('')
+    const numericAge = Number(age)
+    if (!Number.isInteger(numericAge) || numericAge < 18 || numericAge > 100) {
+      setError('Укажите возраст от 18 до 100 лет')
+      return
+    }
+    setBusy(true)
     try {
-      const updated = await api<Profile>('/me', { method: 'PATCH', body: JSON.stringify({ age: Number(age), bio, district_id: district, sports }) })
+      const updated = await api<Profile>('/me', { method: 'PATCH', body: JSON.stringify({ age: numericAge, bio, district_id: district, sports }) })
       onSaved(updated)
     } catch (e) { setError(e instanceof Error ? e.message : 'Не удалось сохранить') }
     finally { setBusy(false) }
@@ -94,7 +131,7 @@ function ProfileForm({ profile, onSaved, title = 'Расскажите о себ
     <p className="eyebrow">Профиль · 1 минута</p><h1>{title}</h1>
     <p className="lead">Это поможет другим понять, подойдёт ли вам тренировка.</p>
     <form onSubmit={save}>
-      <label>Возраст<input required min="18" max="100" inputMode="numeric" value={age} onChange={e => setAge(e.target.value)} placeholder="Например, 24" /></label>
+      <label>Возраст<input required type="text" inputMode="numeric" pattern="[0-9]*" value={age} onChange={e => setAge(e.target.value.replace(/\D/g, '').slice(0, 3))} onBlur={() => { if (!age) setAge(profile.age?.toString() || '18') }} placeholder="Например, 24" /></label>
       <label>Пара слов о себе<textarea maxLength={500} value={bio} onChange={e => setBio(e.target.value)} placeholder="Когда обычно тренируетесь, что важно в компании" /></label>
       <label>Район<select required value={district} onChange={e => setDistrict(e.target.value)}><option value="">Выберите район</option>{lookups.districts.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
       <fieldset><legend>Ваши виды спорта</legend><div className="chips">{lookups.sports.map(sport => <button type="button" key={sport.id} className={sports.some(x => x.sport_id === sport.id) ? 'chip selected' : 'chip'} onClick={() => toggleSport(sport.id)}>{sport.emoji} {sport.name}</button>)}</div></fieldset>
@@ -116,7 +153,7 @@ function ActivityCard({ activity }: { activity: Activity }) {
   return <Link to={`/activities/${activity.id}`} className="card activity-card">
     <div className="card-top"><span className="sport-icon">{activity.sport_emoji}</span><div><strong>{activity.sport_name}</strong><span>{levels.find(x => x.id === activity.level)?.name}</span></div><span className={`badge ${activity.status}`}>{statusNames[activity.status]}</span></div>
     <div className="activity-main"><div className="date-block"><strong>{date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}</strong><span>{date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span></div><div><strong>{activity.place}</strong><span>{activity.district_name}</span></div></div>
-    <div className="card-bottom"><span>{activity.author.first_name}, {activity.author.age || '—'} · {activity.author.rating_count ? `★ ${activity.author.rating_average}` : 'без оценок'}</span><b>{activity.remaining_places} {activity.remaining_places === 1 ? 'место' : 'места'}</b></div>
+    <div className="card-bottom"><span>{activity.author.first_name}, {activity.author.age || '—'} · {activity.author.rating_count ? `★ ${activity.author.rating_average}` : 'без оценок'}</span><b>{activity.remaining_places === null ? 'Без ограничений' : placesLabel(activity.remaining_places)}</b></div>
     {activity.my_response_status && <div className="response-line">Ваш статус: {statusNames[activity.my_response_status] || activity.my_response_status}</div>}
   </Link>
 }
@@ -131,6 +168,9 @@ function Feed() {
   const [district, setDistrict] = useState('')
   const [day, setDay] = useState('')
   const [timeFrom, setTimeFrom] = useState('')
+  const today = dateInputValue(new Date())
+  const tomorrowDate = new Date(); tomorrowDate.setDate(tomorrowDate.getDate() + 1)
+  const tomorrow = dateInputValue(tomorrowDate)
   const load = useCallback(async () => {
     setLoading(true); setError('')
     const params = new URLSearchParams(); if (sport) params.set('sport_id', sport); if (level) params.set('level', level); if (district) params.set('district_id', district); if (day) params.set('day', day); if (timeFrom) params.set('time_from', timeFrom)
@@ -140,7 +180,35 @@ function Feed() {
   }, [sport, level, district, day, timeFrom])
   useEffect(() => { void load() }, [load])
   return <Shell><main className="page feed"><div className="hero"><p className="eyebrow">Рядом с вами</p><h1>Пора двигаться</h1><p>Выберите тренировку или соберите свою компанию.</p><Link to="/create" className="button primary">＋ Создать активность</Link></div>
-    <div className="filters"><select aria-label="Вид спорта" value={sport} onChange={e => { setSport(e.target.value); void track('filter_applied', { sport_id: e.target.value }) }}><option value="">Все виды спорта</option>{lookups.sports.map(x => <option key={x.id} value={x.id}>{x.emoji} {x.name}</option>)}</select><select aria-label="Уровень" value={level} onChange={e => { setLevel(e.target.value); void track('filter_applied', { level: e.target.value }) }}><option value="">Любой уровень</option>{levels.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select><select aria-label="Район" value={district} onChange={e => { setDistrict(e.target.value); void track('filter_applied', { district_id: e.target.value }) }}><option value="">Все районы</option>{lookups.districts.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select><input aria-label="Дата" type="date" value={day} onChange={e => { setDay(e.target.value); void track('filter_applied', { source: 'day' }) }} /><input aria-label="Время от" type="time" value={timeFrom} onChange={e => { setTimeFrom(e.target.value); void track('filter_applied', { source: 'time_from' }) }} /></div>
+    <div className="filters">
+      <select aria-label="Вид спорта" value={sport} onChange={e => { setSport(e.target.value); void track('filter_applied', { sport_id: e.target.value }) }}><option value="">Все виды спорта</option>{lookups.sports.map(x => <option key={x.id} value={x.id}>{x.emoji} {x.name}</option>)}</select>
+      <select aria-label="Уровень" value={level} onChange={e => { setLevel(e.target.value); void track('filter_applied', { level: e.target.value }) }}><option value="">Любой уровень</option>{levels.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
+      <select aria-label="Район" value={district} onChange={e => { setDistrict(e.target.value); void track('filter_applied', { district_id: e.target.value }) }}><option value="">Все районы</option>{lookups.districts.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
+      <div className="filter-section">
+        <span className="filter-label">📅 Дата</span>
+        <div className="filter-options">
+          <button type="button" className={!day ? 'chip selected' : 'chip'} onClick={() => setDay('')}>Любая</button>
+          <button type="button" className={day === today ? 'chip selected' : 'chip'} onClick={() => setDay(today)}>Сегодня</button>
+          <button type="button" className={day === tomorrow ? 'chip selected' : 'chip'} onClick={() => setDay(tomorrow)}>Завтра</button>
+          <label className={day && day !== today && day !== tomorrow ? 'chip picker-chip selected' : 'chip picker-chip'}>
+            {day && day !== today && day !== tomorrow ? filterDateLabel(day) : 'Другая дата'}
+            <input aria-label="Выбрать другую дату" type="date" value={day} onChange={e => { setDay(e.target.value); void track('filter_applied', { source: 'day' }) }} />
+          </label>
+        </div>
+      </div>
+      <div className="filter-section">
+        <span className="filter-label">🕒 Начало не раньше</span>
+        <div className="filter-options">
+          <button type="button" className={!timeFrom ? 'chip selected' : 'chip'} onClick={() => setTimeFrom('')}>Любое</button>
+          <button type="button" className={timeFrom === '09:00' ? 'chip selected' : 'chip'} onClick={() => setTimeFrom('09:00')}>С 09:00</button>
+          <button type="button" className={timeFrom === '18:00' ? 'chip selected' : 'chip'} onClick={() => setTimeFrom('18:00')}>С 18:00</button>
+          <label className={timeFrom && !['09:00', '18:00'].includes(timeFrom) ? 'chip picker-chip selected' : 'chip picker-chip'}>
+            {timeFrom && !['09:00', '18:00'].includes(timeFrom) ? `С ${timeFrom}` : 'Другое время'}
+            <input aria-label="Выбрать другое время" type="time" value={timeFrom} onChange={e => { setTimeFrom(e.target.value); void track('filter_applied', { source: 'time_from' }) }} />
+          </label>
+        </div>
+      </div>
+    </div>
     {loading ? <Loading /> : error ? <ErrorState message={error} retry={load} /> : items.length ? <div className="cards">{items.map(x => <ActivityCard key={x.id} activity={x} />)}</div> : <div className="state"><span className="state-icon">🏀</span><h2>{sport || level || district || day || timeFrom ? 'Ничего не нашли' : 'Пока тихо'}</h2><p>{sport || level || district || day || timeFrom ? 'Сбросьте фильтры или создайте свою активность.' : 'Станьте первым, кто позовёт соседей на тренировку.'}</p>{sport || level || district || day || timeFrom ? <button onClick={() => { setSport(''); setLevel(''); setDistrict(''); setDay(''); setTimeFrom('') }}>Сбросить фильтры</button> : <Link className="button primary" to="/create">Создать активность</Link>}</div>}
   </main></Shell>
 }
@@ -148,7 +216,7 @@ function Feed() {
 function CreateActivity() {
   const nav = useNavigate(); const lookups = useLookups()
   const [clientRequestId] = useState(() => crypto.randomUUID())
-  const [form, setForm] = useState({ sport_id: '', district_id: '', level: 'beginner', starts_at: '', place: '', players_needed: 1, comment: '' })
+  const [form, setForm] = useState<{ sport_id: string; district_id: string; level: string; starts_at: string; place: string; players_needed: number | null; comment: string }>({ sport_id: '', district_id: '', level: 'beginner', starts_at: '', place: '', players_needed: 1, comment: '' })
   const [error, setError] = useState(''); const [busy, setBusy] = useState(false)
   useEffect(() => { void track('activity_create_started') }, [])
   useEffect(() => { if (!form.sport_id && lookups.sports[0] && lookups.districts[0]) setForm(v => ({ ...v, sport_id: lookups.sports[0].id, district_id: lookups.districts[0].id })) }, [form.sport_id, lookups])
@@ -161,7 +229,7 @@ function CreateActivity() {
     <label>Когда<input required type="datetime-local" value={form.starts_at} onChange={e => setForm({ ...form, starts_at: e.target.value })} /></label>
     <label>Место<input required minLength={2} maxLength={200} value={form.place} onChange={e => setForm({ ...form, place: e.target.value })} placeholder="Площадка у дома, адрес или ориентир" /></label>
     <label>Район<select required value={form.district_id} onChange={e => setForm({ ...form, district_id: e.target.value })}>{lookups.districts.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
-    <label>Сколько игроков нужно<input required type="number" min="1" max="5" value={form.players_needed} onChange={e => setForm({ ...form, players_needed: Number(e.target.value) })} /></label>
+    <ParticipantLimitField value={form.players_needed} onChange={players_needed => setForm({ ...form, players_needed })} />
     <label>Комментарий<textarea maxLength={1000} value={form.comment} onChange={e => setForm({ ...form, comment: e.target.value })} placeholder="Что взять с собой, темп, детали встречи" /></label>
     {error && <Notice error>{error}</Notice>}<button className="primary wide" disabled={busy}>{busy ? 'Создаём…' : 'Создать активность'}</button>
   </form></main></Shell>
@@ -174,7 +242,7 @@ function toLocalDateTime(value: string) {
 
 function EditActivity() {
   const { id = '' } = useParams(); const nav = useNavigate(); const lookups = useLookups()
-  const [form, setForm] = useState<{ sport_id: string; district_id: string; level: string; starts_at: string; place: string; players_needed: number; comment: string }>()
+  const [form, setForm] = useState<{ sport_id: string; district_id: string; level: string; starts_at: string; place: string; players_needed: number | null; comment: string }>()
   const [error, setError] = useState(''); const [busy, setBusy] = useState(false)
   useEffect(() => { api<Activity>(`/activities/${id}`).then(item => { if (!item.is_owner) throw new Error('Редактирование доступно только организатору'); setForm({ sport_id: item.sport_id, district_id: item.district_id, level: item.level, starts_at: toLocalDateTime(item.starts_at), place: item.place, players_needed: item.players_needed, comment: item.comment }) }).catch(e => setError(e instanceof Error ? e.message : 'Не удалось загрузить')) }, [id])
   const submit = async (event: FormEvent) => { event.preventDefault(); if (!form) return; setBusy(true); setError(''); try { await api(`/activities/${id}`, { method: 'PATCH', body: JSON.stringify({ ...form, starts_at: new Date(form.starts_at).toISOString() }) }); nav(`/activities/${id}`) } catch (e) { setError(e instanceof Error ? e.message : 'Не удалось сохранить') } finally { setBusy(false) } }
@@ -185,7 +253,7 @@ function EditActivity() {
     <label>Когда<input required type="datetime-local" value={form.starts_at} onChange={e => setForm({ ...form, starts_at: e.target.value })} /></label>
     <label>Место<input required minLength={2} maxLength={200} value={form.place} onChange={e => setForm({ ...form, place: e.target.value })} /></label>
     <label>Район<select value={form.district_id} onChange={e => setForm({ ...form, district_id: e.target.value })}>{lookups.districts.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
-    <label>Сколько игроков нужно<input required type="number" min="1" max="5" value={form.players_needed} onChange={e => setForm({ ...form, players_needed: Number(e.target.value) })} /></label>
+    <ParticipantLimitField value={form.players_needed} onChange={players_needed => setForm({ ...form, players_needed })} />
     <label>Комментарий<textarea maxLength={1000} value={form.comment} onChange={e => setForm({ ...form, comment: e.target.value })} /></label>
     {error && <Notice error>{error}</Notice>}<button className="primary wide" disabled={busy}>{busy ? 'Сохраняем…' : 'Сохранить изменения'}</button>
   </form></main></Shell>
@@ -218,7 +286,7 @@ function ActivityDetails() {
   const d = new Date(item.starts_at)
   return <Shell><main className="page detail"><button className="back link-button" onClick={() => nav(-1)}>← Назад</button>
     <div className="detail-hero"><span className="big-icon">{item.sport_emoji}</span><p className="eyebrow">{statusNames[item.status]}</p><h1>{item.sport_name}</h1><p>{levels.find(x => x.id === item.level)?.name}</p></div>
-    <section className="detail-grid"><div><span>Когда</span><strong>{d.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}<br />{d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</strong></div><div><span>Где</span><strong>{item.place}<br />{item.district_name}</strong></div><div><span>Компания</span><strong>Нужно ещё {item.remaining_places} из {item.players_needed}</strong></div></section>
+    <section className="detail-grid"><div><span>Когда</span><strong>{d.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}<br />{d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</strong></div><div><span>Где</span><strong>{item.place}<br />{item.district_name}</strong></div><div><span>Компания</span><strong>{item.players_needed === null ? 'Без ограничений' : `Нужно ещё ${placesLabel(item.remaining_places || 0)} из ${item.players_needed}`}</strong></div></section>
     <section className="organizer"><Avatar name={item.author.first_name} url={item.author.photo_url} /><div><span>Организатор</span><Link className="profile-link" to={`/users/${item.author.id}`}>{item.author.first_name}, {item.author.age || 'возраст не указан'}</Link><small>{item.author.rating_count ? `★ ${item.author.rating_average} · ${item.author.rating_count} оценок` : 'Пока нет оценок'}</small></div></section>
     {item.comment && <section><h3>Комментарий</h3><p>{item.comment}</p></section>}
     {error && <Notice error>{error}</Notice>}
@@ -279,12 +347,12 @@ function MetricsPage() {
   const lookups = useLookups()
   const [start, setStart] = useState(() => new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10))
   const [end, setEnd] = useState(() => new Date().toISOString().slice(0, 10))
-  const [key, setKey] = useState(sessionStorage.getItem('sports_mate_internal_key') || '')
+  const [key, setKey] = useState('')
   const [sport, setSport] = useState(''); const [district, setDistrict] = useState('')
   const [level, setLevel] = useState(''); const [source, setSource] = useState('')
   const [data, setData] = useState<Metrics>(); const [error, setError] = useState('')
   const periodDays = Math.max(1, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 86400000) + 1)
-  const load = async () => { setError(''); const params = new URLSearchParams({ period_start: start, period_end: end }); if (sport) params.set('sport_id', sport); if (district) params.set('district_id', district); if (level) params.set('level', level); if (source) params.set('acquisition_source', source); try { const result = await api<Metrics>(`/internal/metrics?${params}`, { headers: { 'X-Internal-Key': key } }); sessionStorage.setItem('sports_mate_internal_key', key); setData(result) } catch (e) { setError(e instanceof Error ? e.message : 'Метрики недоступны') } }
+  const load = async () => { setError(''); const params = new URLSearchParams({ period_start: start, period_end: end }); if (sport) params.set('sport_id', sport); if (district) params.set('district_id', district); if (level) params.set('level', level); if (source) params.set('acquisition_source', source); try { const result = await api<Metrics>(`/internal/metrics?${params}`, { headers: { 'X-Internal-Key': key } }); setData(result) } catch (e) { setError(e instanceof Error ? e.message : 'Метрики недоступны') } }
   const percent = (value?: number) => value == null ? 'Недостаточно данных' : `${(value * 100).toFixed(1)}%`
   const cards = data ? [
     ['Регистрации', String(data.registrations), `возраст когорты: ${data.cohort_age_days} дн.`],
